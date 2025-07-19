@@ -49,12 +49,10 @@ export const getCopilotMetrics = async (
     
     // If teams are specified, use the teams-specific API function
     if (filter.team && filter.team.length > 0) {
-      console.log(`📈 Using team-specific metrics API for teams: ${filter.team.join(', ')}`);
       const result = await getCopilotTeamsMetricsFromApi(filter);
       return result;
     }
     
-    console.log('📈 Using organization-level metrics API');
     const result = await getCopilotMetricsFromApi(filter);
     return result;
   } catch (e) {
@@ -67,7 +65,7 @@ const fetchCopilotMetrics = async (
   token: string,
   version: string,
   entityName: string
-): Promise<ServerActionResponse<CopilotUsageOutput[]>> => {  
+): Promise<ServerActionResponse<CopilotUsageOutput[]>> => {
   const response = await fetch(url, {
     cache: "no-store",
     headers: {
@@ -83,7 +81,6 @@ const fetchCopilotMetrics = async (
 
   const data = await response.json();
   const dataWithTimeFrame = applyTimeFrameLabel(data);
-  
   return {
     status: "OK",
     response: dataWithTimeFrame,

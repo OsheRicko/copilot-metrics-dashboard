@@ -156,14 +156,6 @@ export const computeLanguageData = (
 export const computeActiveUserAverage = (
   filteredData: CopilotUsageOutput[]
 ) => {
-  
-  if (filteredData.length > 0) {
-    console.log('🔢 Sample data item:', {
-      total_active_users: filteredData[0].total_active_users,
-      time_frame_display: filteredData[0].time_frame_display,
-    });
-  }
-  
   const activeUsersSum: number = filteredData.reduce(
     (sum: number, item: { total_active_users: number }) =>
       sum + item.total_active_users,
@@ -171,7 +163,6 @@ export const computeActiveUserAverage = (
   );
 
   const averageActiveUsers = activeUsersSum / filteredData.length;
-    
   return averageActiveUsers > 0 ? averageActiveUsers : 0;
 };
 
