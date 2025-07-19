@@ -47,6 +47,7 @@ export default async function Dashboard(props: IProps) {
   if (teams.status !== "OK") {
     return <ErrorPage error={teams.errors[0].message} />;
   }
+
   return (
     <DataProvider
       copilotUsages={metrics.response}

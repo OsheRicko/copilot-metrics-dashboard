@@ -19,6 +19,9 @@ export interface IFilter {
 export const getCopilotMetrics = async (
   filter: IFilter
 ): Promise<ServerActionResponse<CopilotUsageOutput[]>> => {
+  // Critical logging to track metrics API calls
+  console.log('📈 getCopilotMetrics called with filter:', JSON.stringify(filter));
+  
   const env = ensureGitHubEnvConfig();
   const isCosmosConfig = cosmosConfiguration();
 
@@ -40,16 +43,32 @@ export const getCopilotMetrics = async (
           filter.organization = organization;
         }
         break;
-    }    if (isCosmosConfig) {
-      return getCopilotMetricsFromDatabase(filter);
+    }
+    
+    if (isCosmosConfig) {
+      const result = await getCopilotMetricsFromDatabase(filter);
+      if (result.status === "OK") {
+        console.log(`📈 getCopilotMetrics (database) result: ${result.response.length} items`);
+      }
+      return result;
     }
     
     // If teams are specified, use the teams-specific API function
     if (filter.team && filter.team.length > 0) {
-      return getCopilotTeamsMetricsFromApi(filter);
+      console.log(`📈 Using team-specific metrics API for teams: ${filter.team.join(', ')}`);
+      const result = await getCopilotTeamsMetricsFromApi(filter);
+      if (result.status === "OK") {
+        console.log(`📈 Team-specific metrics result: ${result.response.length} items`);
+      }
+      return result;
     }
     
-    return getCopilotMetricsFromApi(filter);
+    console.log('📈 Using organization-level metrics API');
+    const result = await getCopilotMetricsFromApi(filter);
+    if (result.status === "OK") {
+      console.log(`📈 Organization metrics result: ${result.response.length} items`);
+    }
+    return result;
   } catch (e) {
     return unknownResponseError(e);
   }
@@ -61,6 +80,8 @@ const fetchCopilotMetrics = async (
   version: string,
   entityName: string
 ): Promise<ServerActionResponse<CopilotUsageOutput[]>> => {
+  console.log(`📈 Fetching metrics from URL: ${url}`);
+  
   const response = await fetch(url, {
     cache: "no-store",
     headers: {
@@ -71,11 +92,23 @@ const fetchCopilotMetrics = async (
   });
 
   if (!response.ok) {
+    console.log(`📈 ERROR: Metrics API request failed for ${entityName}: ${response.status}`);
     return formatResponseError(entityName, response);
   }
 
   const data = await response.json();
+  console.log(`📈 Raw metrics data from ${entityName}:`, JSON.stringify(data, null, 2));
+  
+  // Log total_active_users from each day to debug the 32 issue
+  if (Array.isArray(data)) {
+    data.forEach((dayData, index) => {
+      console.log(`📈 Day ${index + 1} (${dayData.day}): total_active_users = ${dayData.total_active_users}`);
+    });
+  }
+  
   const dataWithTimeFrame = applyTimeFrameLabel(data);
+  console.log(`📈 Final processed metrics data: ${dataWithTimeFrame.length} days of data`);
+  
   return {
     status: "OK",
     response: dataWithTimeFrame,

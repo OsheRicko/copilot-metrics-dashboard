@@ -4,6 +4,7 @@ import { useDashboard } from "../dashboard-state";
 import { ChartHeader } from "./chart-header";
 import {
   computeActiveUserAverage,
+  computeActiveUsersFromSeats,
   computeAdoptionRate,
   computeCumulativeAcceptanceAverage,
 } from "./common";
@@ -12,7 +13,7 @@ import StatsCard from "./stats-card";
 export const Stats = () => {
   const { filteredSeatsData, filteredData, isLoading } = useDashboard();
   const acceptanceAverage = computeCumulativeAcceptanceAverage(filteredData);
-  const averageActiveUsers = computeActiveUserAverage(filteredData);
+  const averageActiveUsers = computeActiveUsersFromSeats(filteredSeatsData);
   const adoptionRate = computeAdoptionRate(filteredSeatsData);
 
   return (

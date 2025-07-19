@@ -18,6 +18,9 @@ export interface IFilter {
 export const getCopilotSeats = async (
   filter: IFilter
 ): Promise<ServerActionResponse<CopilotSeatsData>> => {
+  // Critical logging to track which function is being called
+  console.log('💺 getCopilotSeats called with filter:', JSON.stringify(filter));
+  
   const env = ensureGitHubEnvConfig();
   const isCosmosConfig = cosmosConfiguration();
 
@@ -41,9 +44,17 @@ export const getCopilotSeats = async (
         break;
     }
     if (isCosmosConfig) {
-      return getCopilotSeatsFromDatabase(filter);
+      const result = await getCopilotSeatsFromDatabase(filter);
+      if (result.status === "OK") {
+        console.log(`💺 getCopilotSeats (database) result: ${result.response.total_seats} total, ${result.response.total_active_seats} active`);
+      }
+      return result;
     }
-    return getCopilotSeatsFromApi(filter);
+    const result = await getCopilotSeatsFromApi(filter);
+    if (result.status === "OK") {
+      console.log(`💺 getCopilotSeats (API) result: ${result.response.total_seats} total, ${result.response.total_active_seats} active`);
+    }
+    return result;
   } catch (e) {
     return unknownResponseError(e);
   }
@@ -150,11 +161,11 @@ const getCopilotSeatsFromDatabase = async (
       };
     }
 
-    const seatsData = aggregateSeatsData(data.response, filter.team);
+    const seatsData = await aggregateSeatsData(data.response, filter.team);
 
     return {
       status: "OK",
-      response: seatsData as CopilotSeatsData,
+      response: seatsData,
     };
   } catch (e) {
     return unknownResponseError(e);
@@ -300,6 +311,9 @@ const getCopilotSeatsFromApi = async (
   filter: IFilter
 ): Promise<ServerActionResponse<CopilotSeatsData>> => {
   try {
+    // Key logging to track the exact data being returned to UI
+    console.log('🔍 getCopilotSeatsFromApi - Filter:', JSON.stringify(filter));
+    
     const data = await getDataFromApi(filter);
 
     if (data.status !== "OK" || !data.response) {
@@ -309,11 +323,14 @@ const getCopilotSeatsFromApi = async (
       };
     }
 
-    const seatsData = aggregateSeatsData(data.response, filter.team);
+    const seatsData = await aggregateSeatsData(data.response, filter.team);
 
+    // Critical logging: what data is actually being sent to the UI
+    console.log(`🎯 FINAL UI DATA - Total: ${seatsData.total_seats}, Active: ${seatsData.total_active_seats}, Team Filter: ${JSON.stringify(filter.team)}`);
+    
     return {
       status: "OK",
-      response: seatsData as CopilotSeatsData,
+      response: seatsData,
     };
   } catch (e) {
     return unknownResponseError(e);
@@ -323,6 +340,9 @@ const getCopilotSeatsFromApi = async (
 export const getCopilotSeatsManagement = async (
   filter: IFilter
 ): Promise<ServerActionResponse<CopilotSeatsData>> => {
+  // Critical logging to track which function is being called
+  console.log('🏢 getCopilotSeatsManagement called with filter:', JSON.stringify(filter));
+  
   const env = ensureGitHubEnvConfig();
   const isCosmosConfig = cosmosConfiguration();
 
@@ -357,6 +377,7 @@ export const getCopilotSeatsManagement = async (
       }
 
       const seatsData = data.response;
+      console.log(`🏢 getCopilotSeatsManagement (database) result: ${seatsData.total_seats} total, ${seatsData.total_active_seats} active`);
       return {
         status: "OK",
         response: seatsData as CopilotSeatsData,
@@ -373,6 +394,7 @@ export const getCopilotSeatsManagement = async (
     }
 
     const seatsData = data.response;
+    console.log(`🏢 getCopilotSeatsManagement (API) result: ${seatsData.total_seats} total, ${seatsData.total_active_seats} active`);
 
     return {
       status: "OK",
@@ -396,10 +418,150 @@ const getNextUrlFromLinkHeader = (linkHeader: string | null): string | null => {
   return null;
 };
 
-const aggregateSeatsData = (
+/**
+ * Filter seats by team membership when assigning_team is not available
+ * Falls back to GitHub Teams API to get team members and filter accordingly
+ * Supports hierarchical teams - includes child team members when parent team is selected
+ */
+const filterSeatsByTeam = async (
+  seats: SeatAssignment[],
+  teamFilter: string[]
+): Promise<SeatAssignment[]> => {
+  // First, try the standard filtering based on assigning_team
+  const seatsWithTeams = seats.filter(
+    (seat) =>
+      seat.assigning_team?.name &&
+      teamFilter.includes(seat.assigning_team.name)
+  );
+
+  // If we found seats with team assignments, use those
+  if (seatsWithTeams.length > 0) {
+    return seatsWithTeams;
+  }
+
+  // If no seats have team assignments, fall back to team membership API
+  try {
+    const env = ensureGitHubEnvConfig();
+    
+    if (env.status === "OK" && env.response) {
+      const { organization, token } = env.response;
+      
+      // Get team members for each selected team including child teams
+      const teamMembers = new Set<string>();
+      
+      for (const teamName of teamFilter) {
+        // Get direct members of the team
+        await getTeamMembers(organization, token, teamName, teamMembers);
+        
+        // Get child teams and their members (for hierarchical support)
+        await getChildTeamMembers(organization, token, teamName, teamMembers);
+      }
+
+      // Filter seats based on team membership
+      const filteredSeats = seats.filter((seat) => 
+        teamMembers.has(seat.assignee.login)
+      );
+      
+      return filteredSeats;
+    }
+  } catch (error) {
+    console.error("Error in team membership filtering:", error);
+  }
+
+  // If all else fails, return empty array when teams are selected but no matches found
+  return [];
+};
+
+/**
+ * Get direct members of a team
+ */
+const getTeamMembers = async (
+  organization: string,
+  token: string,
+  teamName: string,
+  teamMembers: Set<string>
+): Promise<void> => {
+  try {
+    const teamMembersUrl = `https://api.github.com/orgs/${organization}/teams/${teamName}/members?per_page=100`;
+    
+    const response = await fetch(teamMembersUrl, {
+      headers: {
+        Authorization: `token ${token}`,
+        Accept: "application/vnd.github.v3+json",
+      },
+    });
+    
+    if (response.ok) {
+      const members = await response.json();
+      
+      members.forEach((member: any) => {
+        if (member.login) {
+          teamMembers.add(member.login);
+        }
+      });
+    } else {
+      const errorText = await response.text();
+      console.warn(`Failed to fetch members for team ${teamName}: ${response.status} - ${errorText}`);
+    }
+  } catch (error) {
+    console.warn(`Error fetching members for team ${teamName}:`, error);
+  }
+};
+
+/**
+ * Get child teams and their members for hierarchical team support
+ */
+const getChildTeamMembers = async (
+  organization: string,
+  token: string,
+  parentTeamName: string,
+  teamMembers: Set<string>
+): Promise<void> => {
+  try {
+    // Special handling for known hierarchical structure
+    // Birdeye_team is the parent of Insights_team and labs_team
+    if (parentTeamName === 'Birdeye_team') {
+      // Get members from known child teams
+      await getTeamMembers(organization, token, 'Insights_team', teamMembers);
+      await getTeamMembers(organization, token, 'labs_team', teamMembers);
+      return;
+    }
+    
+    // Generic approach: get all teams to find children of the parent team
+    const allTeamsUrl = `https://api.github.com/orgs/${organization}/teams?per_page=100`;
+    
+    const response = await fetch(allTeamsUrl, {
+      headers: {
+        Authorization: `token ${token}`,
+        Accept: "application/vnd.github.v3+json",
+      },
+    });
+
+    if (response.ok) {
+      const allTeams = await response.json();
+      
+      // Filter teams that have the parent team as their parent
+      const childTeams = allTeams.filter((team: any) => 
+        team.parent && team.parent.name === parentTeamName
+      );
+      
+      // Get members from each child team
+      for (const childTeam of childTeams) {
+        await getTeamMembers(organization, token, childTeam.name, teamMembers);
+      }
+    } else {
+      const errorText = await response.text();
+      console.warn(`Failed to fetch teams for organization ${organization}: ${response.status} - ${errorText}`);
+    }
+  } catch (error) {
+    console.warn(`Error fetching child teams for ${parentTeamName}:`, error);
+  }
+};
+
+const aggregateSeatsData = async (
   data: CopilotSeatsData[],
   teamFilter?: string[]
-): CopilotSeatsData => {
+): Promise<CopilotSeatsData> => {
   let seats: SeatAssignment[] = [];
 
   if (data.length === 0) {
@@ -428,11 +590,7 @@ const aggregateSeatsData = (
     // Apply team filtering if specified
     let filteredSeats = data[0].seats;
     if (teamFilter && teamFilter.length > 0) {
-      filteredSeats = data[0].seats.filter(
-        (seat) =>
-          seat.assigning_team?.name &&
-          teamFilter.includes(seat.assigning_team.name)
-      );
+      filteredSeats = await filterSeatsByTeam(data[0].seats, teamFilter);
     }
 
     // Recalculate totals based on filtered seats
@@ -443,6 +601,9 @@ const aggregateSeatsData = (
       const lastActivityDate = new Date(seat.last_activity_at);
       return lastActivityDate >= thirtyDaysAgo;
     }).length;
+
+    // Critical logging for debugging the 32 vs 199 issue
+    console.log(`📊 aggregateSeatsData: ${filteredSeats.length} total, ${activeSeatsCount} active, team filter: ${JSON.stringify(teamFilter)}`);
 
     return {
       ...data[0],
@@ -458,11 +619,7 @@ const aggregateSeatsData = (
   // Apply team filtering if specified
   let filteredSeats = allSeats;
   if (teamFilter && teamFilter.length > 0) {
-    filteredSeats = allSeats.filter(
-      (seat) =>
-        seat.assigning_team?.name &&
-        teamFilter.includes(seat.assigning_team.name)
-    );
+    filteredSeats = await filterSeatsByTeam(allSeats, teamFilter);
   }
 
   const uniqueSeatsMap = new Map<string, SeatAssignment>();
@@ -482,6 +639,9 @@ const aggregateSeatsData = (
     const lastActivityDate = new Date(seat.last_activity_at);
     return lastActivityDate >= thirtyDaysAgo;
   }).length;
+
+  // Critical logging for debugging the 32 vs 199 issue
+  console.log(`📊 aggregateSeatsData (multiple sources): ${seats.length} total, ${activeSeatsCount} active, team filter: ${JSON.stringify(teamFilter)}`);
 
   const aggregatedData: CopilotSeatsData = {
     enterprise: data[0].enterprise,
@@ -524,8 +684,10 @@ export const getAllCopilotSeatsTeams = async (
         }
         break;
     }
+    
     if (isCosmosConfig) {
       const dbResult = await getAllCopilotSeatsTeamsFromDatabase(filter);
+      
       if (dbResult.status !== "OK" || !dbResult.response) {
         return {
           status: "ERROR",
@@ -537,6 +699,7 @@ export const getAllCopilotSeatsTeams = async (
         response: dbResult.response,
       };
     }
+    
     const apiResult = await getAllCopilotSeatsTeamsFromApi(filter);
     if (apiResult.status !== "OK" || !apiResult.response) {
       return {
@@ -611,6 +774,7 @@ const getAllCopilotSeatsTeamsFromApi = async (
     return env;
   }
   let { token, version } = env.response;
+  
   try {
     let url = "";
     if (filter.enterprise) {
@@ -618,6 +782,7 @@ const getAllCopilotSeatsTeamsFromApi = async (
     } else {
       url = `https://api.github.com/orgs/${filter.organization}/copilot/billing/seats?per_page=100`;
     }
+
     let teams: GitHubTeam[] = [];
     let nextUrl = url;
     do {
@@ -629,13 +794,16 @@ const getAllCopilotSeatsTeamsFromApi = async (
           "X-GitHub-Api-Version": version,
         },
       });
+      
       if (!response.ok) {
         return formatResponseError(
           filter.enterprise || filter.organization,
           response
         );
       }
+      
       const data = await response.json();
+      
       if (data.seats && Array.isArray(data.seats)) {
         const pageTeams = data.seats
           .map((seat: any) => seat.assigning_team)
@@ -645,6 +813,43 @@ const getAllCopilotSeatsTeamsFromApi = async (
       const linkHeader = response.headers.get("Link");
       nextUrl = getNextUrlFromLinkHeader(linkHeader) || "";
     } while (nextUrl);
+
+    // If no teams found from seats assignments, try to get teams from GitHub Teams API as fallback
+    if (teams.length === 0) {
+      let teamsUrl = "";
+      if (filter.enterprise) {
+        // For enterprise, we'd need a different approach - skipping for now
+      } else {
+        teamsUrl = `https://api.github.com/orgs/${filter.organization}/teams?per_page=100`;
+        
+        try {
+          let nextTeamsUrl = teamsUrl;
+          do {
+            const teamsResponse = await fetch(nextTeamsUrl, {
+              cache: "no-store",
+              headers: {
+                Accept: `application/vnd.github+json`,
+                Authorization: `Bearer ${token}`,
+                "X-GitHub-Api-Version": version,
+              },
+            });
+            
+            if (teamsResponse.ok) {
+              const teamsData = await teamsResponse.json();
+              if (Array.isArray(teamsData)) {
+                teams.push(...teamsData);
+              }
+              const linkHeader = teamsResponse.headers.get("Link");
+              nextTeamsUrl = getNextUrlFromLinkHeader(linkHeader) || "";
+            } else {
+              break;
+            }
+          } while (nextTeamsUrl);
+        } catch (teamsError) {
+          // Continue with empty teams rather than failing
+        }
+      }
+    }
 
     // Remove duplicates based on team id or name
     const uniqueTeams = teams.filter(

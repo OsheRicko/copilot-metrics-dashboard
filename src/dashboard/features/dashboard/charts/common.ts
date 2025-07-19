@@ -156,6 +156,15 @@ export const computeLanguageData = (
 export const computeActiveUserAverage = (
   filteredData: CopilotUsageOutput[]
 ) => {
+  console.log(`🔢 computeActiveUserAverage called with ${filteredData.length} data items`);
+  
+  if (filteredData.length > 0) {
+    console.log('🔢 Sample data item:', {
+      total_active_users: filteredData[0].total_active_users,
+      time_frame_display: filteredData[0].time_frame_display,
+    });
+  }
+  
   const activeUsersSum: number = filteredData.reduce(
     (sum: number, item: { total_active_users: number }) =>
       sum + item.total_active_users,
@@ -163,7 +172,25 @@ export const computeActiveUserAverage = (
   );
 
   const averageActiveUsers = activeUsersSum / filteredData.length;
+  
+  console.log(`🔢 Active users calculation: sum=${activeUsersSum}, count=${filteredData.length}, average=${averageActiveUsers}`);
+  
   return averageActiveUsers > 0 ? averageActiveUsers : 0;
+};
+
+export const computeActiveUsersFromSeats = (seatsData: any) => {
+  console.log(`🔢 computeActiveUsersFromSeats called with seatsData:`, {
+    total_seats: seatsData?.total_seats,
+    total_active_seats: seatsData?.total_active_seats,
+  });
+  
+  if (!seatsData || typeof seatsData.total_active_seats !== 'number') {
+    console.log('🔢 No valid seats data, returning 0');
+    return 0;
+  }
+  
+  console.log(`🔢 Active users from seats: ${seatsData.total_active_seats}`);
+  return seatsData.total_active_seats;
 };
 
 export const computeAdoptionRate = (seatsData: any) => {
