@@ -17,7 +17,10 @@ export interface IFilter {
 
 export const getCopilotSeats = async (
   filter: IFilter
-): Promise<ServerActionResponse<CopilotSeatsData>> => {  
+): Promise<ServerActionResponse<CopilotSeatsData>> => {
+  // Critical logging to track which function is being called
+  console.log('💺 getCopilotSeats called with filter:', JSON.stringify(filter));
+  
   const env = ensureGitHubEnvConfig();
   const isCosmosConfig = cosmosConfiguration();
 
@@ -42,9 +45,15 @@ export const getCopilotSeats = async (
     }
     if (isCosmosConfig) {
       const result = await getCopilotSeatsFromDatabase(filter);
+      if (result.status === "OK") {
+        console.log(`💺 getCopilotSeats (database) result: ${result.response.total_seats} total, ${result.response.total_active_seats} active`);
+      }
       return result;
     }
     const result = await getCopilotSeatsFromApi(filter);
+    if (result.status === "OK") {
+      console.log(`💺 getCopilotSeats (API) result: ${result.response.total_seats} total, ${result.response.total_active_seats} active`);
+    }
     return result;
   } catch (e) {
     return unknownResponseError(e);
@@ -302,6 +311,9 @@ const getCopilotSeatsFromApi = async (
   filter: IFilter
 ): Promise<ServerActionResponse<CopilotSeatsData>> => {
   try {
+    // Key logging to track the exact data being returned to UI
+    console.log('🔍 getCopilotSeatsFromApi - Filter:', JSON.stringify(filter));
+    
     const data = await getDataFromApi(filter);
 
     if (data.status !== "OK" || !data.response) {
@@ -313,6 +325,9 @@ const getCopilotSeatsFromApi = async (
 
     const seatsData = await aggregateSeatsData(data.response, filter.team);
 
+    // Critical logging: what data is actually being sent to the UI
+    console.log(`🎯 FINAL UI DATA - Total: ${seatsData.total_seats}, Active: ${seatsData.total_active_seats}, Team Filter: ${JSON.stringify(filter.team)}`);
+    
     return {
       status: "OK",
       response: seatsData,
@@ -324,7 +339,10 @@ const getCopilotSeatsFromApi = async (
 
 export const getCopilotSeatsManagement = async (
   filter: IFilter
-): Promise<ServerActionResponse<CopilotSeatsData>> => {  
+): Promise<ServerActionResponse<CopilotSeatsData>> => {
+  // Critical logging to track which function is being called
+  console.log('🏢 getCopilotSeatsManagement called with filter:', JSON.stringify(filter));
+  
   const env = ensureGitHubEnvConfig();
   const isCosmosConfig = cosmosConfiguration();
 
@@ -359,6 +377,7 @@ export const getCopilotSeatsManagement = async (
       }
 
       const seatsData = data.response;
+      console.log(`🏢 getCopilotSeatsManagement (database) result: ${seatsData.total_seats} total, ${seatsData.total_active_seats} active`);
       return {
         status: "OK",
         response: seatsData as CopilotSeatsData,
@@ -375,6 +394,7 @@ export const getCopilotSeatsManagement = async (
     }
 
     const seatsData = data.response;
+    console.log(`🏢 getCopilotSeatsManagement (API) result: ${seatsData.total_seats} total, ${seatsData.total_active_seats} active`);
 
     return {
       status: "OK",
@@ -582,6 +602,9 @@ const aggregateSeatsData = async (
       return lastActivityDate >= thirtyDaysAgo;
     }).length;
 
+    // Critical logging for debugging the 32 vs 199 issue
+    console.log(`📊 aggregateSeatsData: ${filteredSeats.length} total, ${activeSeatsCount} active, team filter: ${JSON.stringify(teamFilter)}`);
+
     return {
       ...data[0],
       total_seats: filteredSeats.length,
@@ -616,6 +639,9 @@ const aggregateSeatsData = async (
     const lastActivityDate = new Date(seat.last_activity_at);
     return lastActivityDate >= thirtyDaysAgo;
   }).length;
+
+  // Critical logging for debugging the 32 vs 199 issue
+  console.log(`📊 aggregateSeatsData (multiple sources): ${seats.length} total, ${activeSeatsCount} active, team filter: ${JSON.stringify(teamFilter)}`);
 
   const aggregatedData: CopilotSeatsData = {
     enterprise: data[0].enterprise,
