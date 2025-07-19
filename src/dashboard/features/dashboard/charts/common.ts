@@ -156,7 +156,6 @@ export const computeLanguageData = (
 export const computeActiveUserAverage = (
   filteredData: CopilotUsageOutput[]
 ) => {
-  console.log(`🔢 computeActiveUserAverage called with ${filteredData.length} data items`);
   
   if (filteredData.length > 0) {
     console.log('🔢 Sample data item:', {
@@ -172,24 +171,17 @@ export const computeActiveUserAverage = (
   );
 
   const averageActiveUsers = activeUsersSum / filteredData.length;
-  
-  console.log(`🔢 Active users calculation: sum=${activeUsersSum}, count=${filteredData.length}, average=${averageActiveUsers}`);
-  
+    
   return averageActiveUsers > 0 ? averageActiveUsers : 0;
 };
 
 export const computeActiveUsersFromSeats = (seatsData: any) => {
-  console.log(`🔢 computeActiveUsersFromSeats called with seatsData:`, {
-    total_seats: seatsData?.total_seats,
-    total_active_seats: seatsData?.total_active_seats,
-  });
   
   if (!seatsData || typeof seatsData.total_active_seats !== 'number') {
     console.log('🔢 No valid seats data, returning 0');
     return 0;
   }
   
-  console.log(`🔢 Active users from seats: ${seatsData.total_active_seats}`);
   return seatsData.total_active_seats;
 };
 
