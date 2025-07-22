@@ -462,10 +462,10 @@ const getTeamMembers = async (
   teamMembers: Set<string>
 ): Promise<void> => {
   try {
-    let teamMembersUrl = `https://api.github.com/orgs/${organization}/teams/${teamName}/members?per_page=100`;
-    
+    let teamMembersUrl: string | null = `https://api.github.com/orgs/${organization}/teams/${teamName}/members?per_page=100`;
+
     while (teamMembersUrl) {
-      const response = await fetch(teamMembersUrl, {
+      const response: Response = await fetch(teamMembersUrl, {
         headers: {
           Authorization: `token ${token}`,
           Accept: "application/vnd.github.v3+json",
