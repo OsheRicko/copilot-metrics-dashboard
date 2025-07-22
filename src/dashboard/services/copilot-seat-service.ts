@@ -462,26 +462,38 @@ const getTeamMembers = async (
   teamMembers: Set<string>
 ): Promise<void> => {
   try {
-    const teamMembersUrl = `https://api.github.com/orgs/${organization}/teams/${teamName}/members?per_page=100`;
+    let teamMembersUrl = `https://api.github.com/orgs/${organization}/teams/${teamName}/members?per_page=100`;
     
-    const response = await fetch(teamMembersUrl, {
-      headers: {
-        Authorization: `token ${token}`,
-        Accept: "application/vnd.github.v3+json",
-      },
-    });
-    
-    if (response.ok) {
-      const members = await response.json();
-      
-      members.forEach((member: any) => {
-        if (member.login) {
-          teamMembers.add(member.login);
-        }
+    while (teamMembersUrl) {
+      const response = await fetch(teamMembersUrl, {
+        headers: {
+          Authorization: `token ${token}`,
+          Accept: "application/vnd.github.v3+json",
+        },
       });
-    } else {
-      const errorText = await response.text();
-      console.warn(`Failed to fetch members for team ${teamName}: ${response.status} - ${errorText}`);
+      
+      if (response.ok) {
+        const members = await response.json();
+        
+        members.forEach((member: any) => {
+          if (member.login) {
+            teamMembers.add(member.login);
+          }
+        });
+        
+        // Check for pagination in the Link header
+        const linkHeader = response.headers.get("Link");
+        if (linkHeader) {
+          const nextLinkMatch = linkHeader.match(/<([^>]+)>;\s*rel="next"/);
+          teamMembersUrl = nextLinkMatch ? nextLinkMatch[1] : null;
+        } else {
+          teamMembersUrl = null;
+        }
+      } else {
+        const errorText = await response.text();
+        console.warn(`Failed to fetch members for team ${teamName}: ${response.status} - ${errorText}`);
+        break;
+      }
     }
   } catch (error) {
     console.warn(`Error fetching members for team ${teamName}:`, error);
