@@ -169,7 +169,6 @@ export const computeActiveUserAverage = (
 export const computeActiveUsersFromSeats = (seatsData: any) => {
   
   if (!seatsData || typeof seatsData.total_active_seats !== 'number') {
-    console.log('🔢 No valid seats data, returning 0');
     return 0;
   }
   
