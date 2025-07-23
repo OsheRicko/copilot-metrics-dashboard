@@ -166,15 +166,6 @@ export const computeActiveUserAverage = (
   return averageActiveUsers > 0 ? averageActiveUsers : 0;
 };
 
-export const computeActiveUsersFromSeats = (seatsData: any) => {
-  
-  if (!seatsData || typeof seatsData.total_active_seats !== 'number') {
-    return 0;
-  }
-  
-  return seatsData.total_active_seats;
-};
-
 export const computeAdoptionRate = (seatsData: any) => {
   if (!seatsData || !seatsData.total_seats || seatsData.total_seats === 0) {
     return 0;
