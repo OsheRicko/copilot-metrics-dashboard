@@ -510,40 +510,48 @@ const getChildTeamMembers = async (
   teamMembers: Set<string>
 ): Promise<void> => {
   try {
-    // Special handling for known hierarchical structure
-    // Birdeye_team is the parent of Insights_team and labs_team
-    if (parentTeamName === 'Birdeye_team') {
-      // Get members from known child teams
-      await getTeamMembers(organization, token, 'Insights_team', teamMembers);
-      await getTeamMembers(organization, token, 'labs_team', teamMembers);
-      return;
+    // Generic approach: get all teams to find children of the parent team
+    let allTeamsUrl: string | null = `https://api.github.com/orgs/${organization}/teams?per_page=100`;
+    const allTeams: any[] = [];
+    
+    // Fetch all teams with pagination support
+    while (allTeamsUrl) {
+      const response: Response = await fetch(allTeamsUrl, {
+        headers: {
+          Authorization: `token ${token}`,
+          Accept: "application/vnd.github.v3+json",
+        },
+      });
+
+      if (response.ok) {
+        const teamsPage = await response.json();
+        allTeams.push(...teamsPage);
+        
+        // Check for pagination in the Link header
+        const linkHeader: string | null = response.headers.get("Link");
+        if (linkHeader) {
+          const nextLinkMatch: RegExpMatchArray | null = linkHeader.match(/<([^>]+)>;\s*rel="next"/);
+          allTeamsUrl = nextLinkMatch ? nextLinkMatch[1] : null;
+        } else {
+          allTeamsUrl = null;
+        }
+      } else {
+        const errorText = await response.text();
+        console.warn(`Failed to fetch teams for organization ${organization}: ${response.status} - ${errorText}`);
+        break;
+      }
     }
     
-    // Generic approach: get all teams to find children of the parent team
-    const allTeamsUrl = `https://api.github.com/orgs/${organization}/teams?per_page=100`;
+    // Filter teams that have the parent team as their parent
+    const childTeams = allTeams.filter((team: any) => 
+      team.parent && team.parent.name === parentTeamName
+    );
     
-    const response = await fetch(allTeamsUrl, {
-      headers: {
-        Authorization: `token ${token}`,
-        Accept: "application/vnd.github.v3+json",
-      },
-    });
-
-    if (response.ok) {
-      const allTeams = await response.json();
-      
-      // Filter teams that have the parent team as their parent
-      const childTeams = allTeams.filter((team: any) => 
-        team.parent && team.parent.name === parentTeamName
-      );
-      
-      // Get members from each child team
-      for (const childTeam of childTeams) {
-        await getTeamMembers(organization, token, childTeam.name, teamMembers);
-      }
-    } else {
-      const errorText = await response.text();
-      console.warn(`Failed to fetch teams for organization ${organization}: ${response.status} - ${errorText}`);
+    // Get members from each child team recursively
+    for (const childTeam of childTeams) {
+      await getTeamMembers(organization, token, childTeam.name, teamMembers);
+      // Recursively get members from grandchild teams
+      await getChildTeamMembers(organization, token, childTeam.name, teamMembers);
     }
   } catch (error) {
     console.warn(`Error fetching child teams for ${parentTeamName}:`, error);
