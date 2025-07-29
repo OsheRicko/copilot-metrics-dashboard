@@ -41,20 +41,16 @@ export const getCopilotMetrics = async (
         }
         break;
     }
-    
     if (isCosmosConfig) {
-      const result = await getCopilotMetricsFromDatabase(filter);
-      return result;
+      return await getCopilotMetricsFromDatabase(filter);
     }
     
     // If teams are specified, use the teams-specific API function
     if (filter.team && filter.team.length > 0) {
-      const result = await getCopilotTeamsMetricsFromApi(filter);
-      return result;
+      return await getCopilotTeamsMetricsFromApi(filter);
     }
     
-    const result = await getCopilotMetricsFromApi(filter);
-    return result;
+    return await getCopilotMetricsFromApi(filter);
   } catch (e) {
     return unknownResponseError(e);
   }

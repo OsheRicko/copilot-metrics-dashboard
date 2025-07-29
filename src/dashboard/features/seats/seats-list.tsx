@@ -6,14 +6,9 @@ import { stringIsNullOrEmpty } from "@/utils/helpers";
 import { DataTable } from "@/components/ui/data-table";
 import { ColumnDef } from "@tanstack/react-table";
 import { DataTableColumnHeader } from "@/components/ui/data-table-column-header";
-import { Button } from "@/components/ui/button";
-import { useState } from "react";
-import { Loader2 } from "lucide-react";
 
 interface SeatData {
     user: string;
-    name: string | null;
-    userUrl: string;
     organization: string | null;
     team: string | null;
     createdAt: string;
@@ -34,83 +29,6 @@ function formatEditorName(editor: string): string {
     return editorName;
 }
 
-// Component for fetching and displaying user name
-// The GitHub Copilot Seats API returns assignee.url (e.g., https://api.github.com/users/username)
-// This component uses that URL to fetch additional user details including the display name
-function UserNameCell({ userUrl, initialName }: { userUrl: string; initialName?: string | null }) {
-    const [name, setName] = useState<string | null>(initialName || null);
-    const [isLoading, setIsLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-
-    const fetchUserName = async () => {
-        if (name || isLoading) return; // Already fetched or currently fetching
-        
-        setIsLoading(true);
-        setError(null);
-        try {
-            const response = await fetch(userUrl);
-            if (response.ok) {
-                const userData = await response.json();
-                setName(userData.name || 'No name available');
-            } else {
-                setError('Failed to fetch');
-                setName('Failed to fetch');
-            }
-        } catch (error) {
-            console.error('Error fetching user data:', error);
-            setError('Error fetching name');
-            setName('Error fetching name');
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    // If we already have a name from the initial data, just display it
-    if (name && !error) {
-        return <div className="ml-2">{name}</div>;
-    }
-
-    // If we had an error, show error state with retry option
-    if (error) {
-        return (
-            <div className="ml-2">
-                <span className="text-red-500 text-xs mr-2">{error}</span>
-                <Button 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={() => {
-                        setError(null);
-                        setName(null);
-                        fetchUserName();
-                    }}
-                    disabled={isLoading}
-                >
-                    Retry
-                </Button>
-            </div>
-        );
-    }
-
-    // Show fetch button if no name is available
-    return (
-        <div className="ml-2">
-            <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={fetchUserName}
-                disabled={isLoading}
-            >
-                {isLoading ? (
-                    <>
-                        <Loader2 size={14} className="animate-spin mr-1" />
-                        Loading...
-                    </>
-                ) : 'Fetch Name'}
-            </Button>
-        </div>
-    );
-}
-
 const arrayIncludes = (row: any, id: string, value: any[]) => {
     return value.includes(row.getValue(id));
 };
@@ -121,12 +39,6 @@ const stringIncludes = (row: any, id: string, value: string) => {
 
 const columns: ColumnDef<SeatData>[] = [
     { accessorKey: "user", title: "User", filter: stringIncludes },
-    { 
-        accessorKey: "name", 
-        title: "Name", 
-        filter: stringIncludes,
-        customCell: true // Custom flag to indicate this needs special rendering
-    },
     { accessorKey: "organization", title: "Organization", filter: arrayIncludes },
     { accessorKey: "team", title: "Team", filter: arrayIncludes },
     { accessorKey: "createdAt", title: "Create Date" },
@@ -145,12 +57,7 @@ const columns: ColumnDef<SeatData>[] = [
             title={col.title}
         />
     ),
-    cell: ({ row }) => {
-        if (col.accessorKey === "name") {
-            return <UserNameCell userUrl={row.original.userUrl} initialName={row.getValue("name")} />;
-        }
-        return <div className="ml-2">{row.getValue(col.accessorKey)}</div>;
-    },
+    cell: ({ row }) => <div className="ml-2">{row.getValue(col.accessorKey)}</div>,
     filterFn: col.filter,
 }));
 
@@ -169,8 +76,6 @@ export const SeatsList = () => {
                     columns={columns.filter((col) => col.id !== "organization" || hasOrganization)}
                     data={(seatsData?.seats ?? []).map((seat) => ({
                         user: seat.assignee.login,
-                        name: seat.assignee.name,
-                        userUrl: seat.assignee.url,
                         organization: seat.organization?.login,
                         team: seat.assigning_team?.name,
                         createdAt: new Date(seat.created_at).toLocaleDateString(),
