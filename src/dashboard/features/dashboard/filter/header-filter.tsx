@@ -20,7 +20,6 @@ export function Filters() {
         allItems={allEditors}
         onSelect={(e) => dashboardStore.filterEditor(e)}
       />{" "}
-      {/* Only show the Teams filter if there are teams available */}
       {allTeams.length > 0 && (
         <DropdownFilter
           name={"Team"}
