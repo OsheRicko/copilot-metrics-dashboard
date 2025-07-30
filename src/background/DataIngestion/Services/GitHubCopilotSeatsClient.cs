@@ -208,7 +208,7 @@ namespace Microsoft.CopilotDashboard.DataIngestion.Services
 
         public async  Task<List<string>> GetAllTeamsAsync()
         {
-            var scope = Environment.GetEnvironmentVariable("GITHUB_SCOPE");
+            var scope = Environment.GetEnvironmentVariable("GITHUB_API_SCOPE");
             var token = Environment.GetEnvironmentVariable("GITHUB_TOKEN")!;
             if (string.IsNullOrWhiteSpace(scope) || scope == "enterprise")
             {
