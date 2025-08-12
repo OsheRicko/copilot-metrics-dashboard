@@ -28,7 +28,7 @@ public class CopilotMetricsIngestion
 
     [Function("GitHubCopilotMetricsIngestion")]
     [CosmosDBOutput(databaseName: "platform-engineering", containerName: "metrics_history", Connection = "AZURE_COSMOSDB_ENDPOINT", CreateIfNotExists = true)]
-    public async Task<List<Metrics>> Run([TimerTrigger("0 */5 * * * *")] TimerInfo myTimer)
+    public async Task<List<Metrics>> Run([TimerTrigger("0 * * * * *")] TimerInfo myTimer)
     {
         _logger.LogInformation($"GitHubCopilotMetricsIngestion timer trigger function executed at: {DateTime.Now}");
 
